@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { AssignmentHistory, Assignment } from "@/components/fleet/AssignmentHistory";
+import { useQuery } from "@tanstack/react-query";
+import { AssignmentHistory } from "@/components/fleet/AssignmentHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
@@ -15,21 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, CalendarIcon, Download, Filter } from "lucide-react";
+import { Search, CalendarIcon, Download, Filter, History } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-
-// todo: remove mock functionality
-const mockAssignments: Assignment[] = [
-  { id: "1", driverName: "John Smith", vehiclePlate: "XYZ-5678", vehicleModel: "Ford Explorer", startDate: new Date("2024-11-15"), status: "active" },
-  { id: "2", driverName: "Jane Doe", vehiclePlate: "GHI-3456", vehicleModel: "Honda Odyssey", startDate: new Date("2024-11-10"), status: "active" },
-  { id: "3", driverName: "Bob Wilson", vehiclePlate: "STU-9012", vehicleModel: "Ram 1500", startDate: new Date("2024-11-05"), status: "active" },
-  { id: "4", driverName: "Alice Brown", vehiclePlate: "ABC-1234", vehicleModel: "Toyota Camry", startDate: new Date("2024-10-20"), endDate: new Date("2024-11-01"), status: "completed" },
-  { id: "5", driverName: "Charlie Davis", vehiclePlate: "JKL-7890", vehicleModel: "Tesla Model 3", startDate: new Date("2024-10-15"), endDate: new Date("2024-10-25"), status: "completed" },
-  { id: "6", driverName: "Diana Evans", vehiclePlate: "DEF-9012", vehicleModel: "Chevrolet Silverado", startDate: new Date("2024-10-01"), endDate: new Date("2024-10-10"), status: "cancelled", notes: "Vehicle recalled for maintenance" },
-  { id: "7", driverName: "John Smith", vehiclePlate: "ABC-1234", vehicleModel: "Toyota Camry", startDate: new Date("2024-09-15"), endDate: new Date("2024-10-01"), status: "completed" },
-  { id: "8", driverName: "Jane Doe", vehiclePlate: "MNO-1234", vehicleModel: "BMW X5", startDate: new Date("2024-09-01"), endDate: new Date("2024-09-20"), status: "completed" },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import type { AssignmentWithDetails } from "@shared/schema";
 
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,22 +28,45 @@ export default function HistoryPage() {
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
 
-  const filteredAssignments = mockAssignments.filter((assignment) => {
+  const { data: assignments = [], isLoading } = useQuery<AssignmentWithDetails[]>({
+    queryKey: ["/api/assignments"],
+  });
+
+  const filteredAssignments = assignments.filter((assignment) => {
     const matchesSearch =
-      assignment.driverName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assignment.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       assignment.vehiclePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
       assignment.vehicleModel.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = statusFilter === "all" || assignment.status === statusFilter;
-    
-    const matchesDateFrom = !dateFrom || assignment.startDate >= dateFrom;
-    const matchesDateTo = !dateTo || assignment.startDate <= dateTo;
+
+    const startDate = new Date(assignment.startDate);
+    const matchesDateFrom = !dateFrom || startDate >= dateFrom;
+    const matchesDateTo = !dateTo || startDate <= dateTo;
 
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
   const handleExport = () => {
-    console.log("Exporting assignments...", filteredAssignments);
+    const csvContent = [
+      ["Driver", "Vehicle Plate", "Vehicle Model", "Start Date", "End Date", "Status"].join(","),
+      ...filteredAssignments.map((a) => [
+        a.clientName,
+        a.vehiclePlate,
+        a.vehicleModel,
+        format(new Date(a.startDate), "yyyy-MM-dd"),
+        a.endDate ? format(new Date(a.endDate), "yyyy-MM-dd") : "",
+        a.status,
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `assignments-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const clearFilters = () => {
@@ -64,6 +78,25 @@ export default function HistoryPage() {
 
   const hasActiveFilters = searchQuery || statusFilter !== "all" || dateFrom || dateTo;
 
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-24" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-10 flex-1" />
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -73,7 +106,7 @@ export default function HistoryPage() {
             View and search past vehicle assignments
           </p>
         </div>
-        <Button variant="outline" onClick={handleExport} data-testid="button-export">
+        <Button variant="outline" onClick={handleExport} disabled={filteredAssignments.length === 0} data-testid="button-export">
           <Download className="h-4 w-4 mr-2" />
           Export
         </Button>
@@ -170,10 +203,22 @@ export default function HistoryPage() {
       </div>
 
       <div className="text-sm text-muted-foreground">
-        Showing {filteredAssignments.length} of {mockAssignments.length} assignments
+        Showing {filteredAssignments.length} of {assignments.length} assignments
       </div>
 
-      <AssignmentHistory assignments={filteredAssignments} />
+      {filteredAssignments.length === 0 ? (
+        <div className="text-center py-12">
+          <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-lg font-medium">No assignments found</p>
+          <p className="text-muted-foreground">
+            {assignments.length === 0
+              ? "Assignment history will appear here"
+              : "Try adjusting your search or filters"}
+          </p>
+        </div>
+      ) : (
+        <AssignmentHistory assignments={filteredAssignments} />
+      )}
     </div>
   );
 }

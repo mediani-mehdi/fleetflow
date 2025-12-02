@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Car, LayoutDashboard, Users, History, Settings, LogOut, User } from "lucide-react";
+import { Car, LayoutDashboard, Users, History, Settings, LogOut, User, Calendar as CalendarIcon, ClipboardList } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -24,7 +24,9 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Vehicles", url: "/vehicles", icon: Car },
-  { title: "Drivers", url: "/drivers", icon: Users },
+  { title: "Clients", url: "/clients", icon: Users },
+  { title: "Assignments", url: "/assignments", icon: ClipboardList },
+  { title: "Calendar", url: "/calendar", icon: CalendarIcon },
   { title: "History", url: "/history", icon: History },
 ];
 
@@ -93,14 +95,18 @@ export function AppSidebar() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem data-testid="menu-profile">
-              <User className="h-4 w-4 mr-2" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-settings">
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </DropdownMenuItem>
+            <Link href="/profile">
+              <DropdownMenuItem data-testid="menu-profile">
+                <User className="h-4 w-4 mr-2" />
+                Profile
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/settings">
+              <DropdownMenuItem data-testid="menu-settings">
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </DropdownMenuItem>
+            </Link>
             <DropdownMenuSeparator />
             <DropdownMenuItem data-testid="menu-logout">
               <LogOut className="h-4 w-4 mr-2" />

@@ -21,9 +21,9 @@ export interface Vehicle {
   licensePlate: string;
   make: string;
   model: string;
-  type: "sedan" | "suv" | "truck" | "van";
+  type: string;
   location: string;
-  status: VehicleStatus;
+  status: string;
   assignedTo?: string;
 }
 
@@ -34,7 +34,7 @@ interface VehicleTableProps {
   onViewHistory?: (vehicleId: string) => void;
 }
 
-const vehicleIcons = {
+const vehicleIcons: Record<string, typeof Car> = {
   sedan: Car,
   suv: Car,
   truck: Truck,
@@ -62,7 +62,7 @@ export function VehicleTable({
         </TableHeader>
         <TableBody>
           {vehicles.map((vehicle) => {
-            const VehicleIcon = vehicleIcons[vehicle.type];
+            const VehicleIcon = vehicleIcons[vehicle.type] || Car;
             return (
               <TableRow
                 key={vehicle.id}

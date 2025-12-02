@@ -15,17 +15,17 @@ export interface Assignment {
   driverName: string;
   vehiclePlate: string;
   vehicleModel: string;
-  startDate: Date;
-  endDate?: Date;
-  status: "active" | "completed" | "cancelled";
-  notes?: string;
+  startDate: Date | string;
+  endDate?: Date | string | null;
+  status: string;
+  notes?: string | null;
 }
 
 interface AssignmentHistoryProps {
   assignments: Assignment[];
 }
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; className: string }> = {
   active: {
     label: "Active",
     className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -41,9 +41,10 @@ const statusConfig = {
 };
 
 export function AssignmentHistory({ assignments }: AssignmentHistoryProps) {
-  const getDuration = (start: Date, end?: Date) => {
-    const endDate = end || new Date();
-    const diffTime = Math.abs(endDate.getTime() - start.getTime());
+  const getDuration = (start: Date | string, end?: Date | string | null) => {
+    const startDate = typeof start === "string" ? new Date(start) : start;
+    const endDate = end ? (typeof end === "string" ? new Date(end) : end) : new Date();
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
   };
@@ -63,7 +64,7 @@ export function AssignmentHistory({ assignments }: AssignmentHistoryProps) {
         </TableHeader>
         <TableBody>
           {assignments.map((assignment) => {
-            const config = statusConfig[assignment.status];
+            const config = statusConfig[assignment.status] || statusConfig.active;
             return (
               <TableRow
                 key={assignment.id}
@@ -82,11 +83,11 @@ export function AssignmentHistory({ assignments }: AssignmentHistoryProps) {
                   </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  {format(assignment.startDate, "MMM d, yyyy")}
+                  {format(new Date(assignment.startDate), "MMM d, yyyy")}
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {assignment.endDate
-                    ? format(assignment.endDate, "MMM d, yyyy")
+                    ? format(new Date(assignment.endDate), "MMM d, yyyy")
                     : "—"}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell text-muted-foreground">

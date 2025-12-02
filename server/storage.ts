@@ -2,17 +2,20 @@ import { eq, and, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   vehicles,
-  drivers,
+  clients,
   assignments,
   type Vehicle,
   type InsertVehicle,
-  type Driver,
-  type InsertDriver,
+  type Client,
+  type InsertClient,
   type Assignment,
   type InsertAssignment,
   type VehicleWithAssignment,
-  type DriverWithAssignment,
+  type ClientWithAssignment,
   type AssignmentWithDetails,
+  users,
+  type User,
+  type InsertUser,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -22,19 +25,24 @@ export interface IStorage {
   updateVehicle(id: string, vehicle: Partial<InsertVehicle>): Promise<Vehicle | undefined>;
   deleteVehicle(id: string): Promise<boolean>;
 
-  getDrivers(): Promise<DriverWithAssignment[]>;
-  getDriver(id: string): Promise<Driver | undefined>;
-  createDriver(driver: InsertDriver): Promise<Driver>;
-  updateDriver(id: string, driver: Partial<InsertDriver>): Promise<Driver | undefined>;
-  deleteDriver(id: string): Promise<boolean>;
+  getClients(): Promise<ClientWithAssignment[]>;
+  getClient(id: string): Promise<Client | undefined>;
+  createClient(client: InsertClient): Promise<Client>;
+  updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined>;
+  deleteClient(id: string): Promise<boolean>;
 
   getAssignments(): Promise<AssignmentWithDetails[]>;
   getAssignment(id: string): Promise<Assignment | undefined>;
-  getActiveAssignmentForDriver(driverId: string): Promise<AssignmentWithDetails | undefined>;
-  getAssignmentHistoryForDriver(driverId: string): Promise<AssignmentWithDetails[]>;
+  getActiveAssignmentForClient(clientId: string): Promise<AssignmentWithDetails | undefined>;
+  getAssignmentHistoryForClient(clientId: string): Promise<AssignmentWithDetails[]>;
   createAssignment(assignment: InsertAssignment): Promise<Assignment>;
   completeAssignment(id: string): Promise<Assignment | undefined>;
   cancelAssignment(id: string): Promise<Assignment | undefined>;
+
+  getUser(id: string): Promise<User | undefined>;
+  updateUserPassword(id: string, hashedPassword: string): Promise<void>;
+  getUserById(id: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -43,7 +51,7 @@ export class DatabaseStorage implements IStorage {
     const activeAssignments = await db
       .select()
       .from(assignments)
-      .innerJoin(drivers, eq(assignments.driverId, drivers.id))
+      .innerJoin(clients, eq(assignments.clientId, clients.id))
       .where(eq(assignments.status, "active"));
 
     return allVehicles.map((vehicle) => {
@@ -52,7 +60,7 @@ export class DatabaseStorage implements IStorage {
       );
       return {
         ...vehicle,
-        assignedTo: assignment?.drivers.name,
+        assignedTo: assignment ? `${assignment.clients.firstName} ${assignment.clients.lastName}` : undefined,
       };
     });
   }
@@ -81,20 +89,20 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  async getDrivers(): Promise<DriverWithAssignment[]> {
-    const allDrivers = await db.select().from(drivers);
+  async getClients(): Promise<ClientWithAssignment[]> {
+    const allClients = await db.select().from(clients);
     const activeAssignments = await db
       .select()
       .from(assignments)
       .innerJoin(vehicles, eq(assignments.vehicleId, vehicles.id))
       .where(eq(assignments.status, "active"));
 
-    return allDrivers.map((driver) => {
+    return allClients.map((client) => {
       const assignment = activeAssignments.find(
-        (a) => a.assignments.driverId === driver.id
+        (a) => a.assignments.clientId === client.id
       );
       return {
-        ...driver,
+        ...client,
         assignedVehicle: assignment
           ? `${assignment.vehicles.make} ${assignment.vehicles.model} (${assignment.vehicles.licensePlate})`
           : undefined,
@@ -102,27 +110,27 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getDriver(id: string): Promise<Driver | undefined> {
-    const [driver] = await db.select().from(drivers).where(eq(drivers.id, id));
-    return driver;
+  async getClient(id: string): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(eq(clients.id, id));
+    return client;
   }
 
-  async createDriver(driver: InsertDriver): Promise<Driver> {
-    const [created] = await db.insert(drivers).values(driver as any).returning();
+  async createClient(client: InsertClient): Promise<Client> {
+    const [created] = await db.insert(clients).values(client as any).returning();
     return created;
   }
 
-  async updateDriver(id: string, driver: Partial<InsertDriver>): Promise<Driver | undefined> {
+  async updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined> {
     const [updated] = await db
-      .update(drivers)
-      .set(driver as any)
-      .where(eq(drivers.id, id))
+      .update(clients)
+      .set(client as any)
+      .where(eq(clients.id, id))
       .returning();
     return updated;
   }
 
-  async deleteDriver(id: string): Promise<boolean> {
-    await db.delete(drivers).where(eq(drivers.id, id));
+  async deleteClient(id: string): Promise<boolean> {
+    await db.delete(clients).where(eq(clients.id, id));
     return true;
   }
 
@@ -130,13 +138,13 @@ export class DatabaseStorage implements IStorage {
     const results = await db
       .select()
       .from(assignments)
-      .innerJoin(drivers, eq(assignments.driverId, drivers.id))
+      .innerJoin(clients, eq(assignments.clientId, clients.id))
       .innerJoin(vehicles, eq(assignments.vehicleId, vehicles.id))
       .orderBy(desc(assignments.startDate));
 
     return results.map((r) => ({
       ...r.assignments,
-      driverName: r.drivers.name,
+      clientName: `${r.clients.firstName} ${r.clients.lastName}`,
       vehiclePlate: r.vehicles.licensePlate,
       vehicleModel: `${r.vehicles.make} ${r.vehicles.model}`,
     }));
@@ -150,15 +158,15 @@ export class DatabaseStorage implements IStorage {
     return assignment;
   }
 
-  async getActiveAssignmentForDriver(driverId: string): Promise<AssignmentWithDetails | undefined> {
+  async getActiveAssignmentForClient(clientId: string): Promise<AssignmentWithDetails | undefined> {
     const [result] = await db
       .select()
       .from(assignments)
-      .innerJoin(drivers, eq(assignments.driverId, drivers.id))
+      .innerJoin(clients, eq(assignments.clientId, clients.id))
       .innerJoin(vehicles, eq(assignments.vehicleId, vehicles.id))
       .where(
         and(
-          eq(assignments.driverId, driverId),
+          eq(assignments.clientId, clientId),
           eq(assignments.status, "active")
         )
       );
@@ -167,21 +175,21 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...result.assignments,
-      driverName: result.drivers.name,
+      clientName: `${result.clients.firstName} ${result.clients.lastName}`,
       vehiclePlate: result.vehicles.licensePlate,
       vehicleModel: `${result.vehicles.make} ${result.vehicles.model}`,
     };
   }
 
-  async getAssignmentHistoryForDriver(driverId: string): Promise<AssignmentWithDetails[]> {
+  async getAssignmentHistoryForClient(clientId: string): Promise<AssignmentWithDetails[]> {
     const results = await db
       .select()
       .from(assignments)
-      .innerJoin(drivers, eq(assignments.driverId, drivers.id))
+      .innerJoin(clients, eq(assignments.clientId, clients.id))
       .innerJoin(vehicles, eq(assignments.vehicleId, vehicles.id))
       .where(
         and(
-          eq(assignments.driverId, driverId),
+          eq(assignments.clientId, clientId),
           eq(assignments.status, "completed")
         )
       )
@@ -189,7 +197,7 @@ export class DatabaseStorage implements IStorage {
 
     return results.map((r) => ({
       ...r.assignments,
-      driverName: r.drivers.name,
+      clientName: `${r.clients.firstName} ${r.clients.lastName}`,
       vehiclePlate: r.vehicles.licensePlate,
       vehicleModel: `${r.vehicles.make} ${r.vehicles.model}`,
     }));
@@ -202,9 +210,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(vehicles.id, assignment.vehicleId));
 
     await db
-      .update(drivers)
+      .update(clients)
       .set({ available: false })
-      .where(eq(drivers.id, assignment.driverId));
+      .where(eq(clients.id, assignment.clientId));
 
     const [created] = await db.insert(assignments).values(assignment as any).returning();
     return created;
@@ -224,9 +232,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(vehicles.id, assignment.vehicleId));
 
     await db
-      .update(drivers)
+      .update(clients)
       .set({ available: true })
-      .where(eq(drivers.id, assignment.driverId));
+      .where(eq(clients.id, assignment.clientId));
 
     const [updated] = await db
       .update(assignments)
@@ -251,9 +259,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(vehicles.id, assignment.vehicleId));
 
     await db
-      .update(drivers)
+      .update(clients)
       .set({ available: true })
-      .where(eq(drivers.id, assignment.driverId));
+      .where(eq(clients.id, assignment.clientId));
 
     const [updated] = await db
       .update(assignments)
@@ -263,6 +271,25 @@ export class DatabaseStorage implements IStorage {
 
     return updated;
   }
+
+  async getUser(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  async updateUserPassword(id: string, hashedPassword: string): Promise<void> {
+    await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id));
+  }
 }
 
-export const storage = new DatabaseStorage();
+export const storage: IStorage = new DatabaseStorage();

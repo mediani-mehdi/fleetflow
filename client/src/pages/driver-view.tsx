@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DriverAssignmentView } from "@/components/fleet/DriverAssignmentView";
 import {
   Dialog,
@@ -18,48 +19,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-
-// todo: remove mock functionality
-const mockCurrentAssignment = {
-  vehicleLicensePlate: "ABC-1234",
-  vehicleMake: "Toyota",
-  vehicleModel: "Camry",
-  vehicleType: "sedan",
-  assignedDate: new Date("2024-11-15"),
-  location: "Downtown HQ - Lot A, Space 42",
-  notes: "Regular maintenance completed on Nov 14. Please check tire pressure before long trips. Gas card is in the glove compartment.",
-};
-
-const mockPastAssignments = [
-  {
-    id: "1",
-    vehiclePlate: "XYZ-5678",
-    vehicleModel: "Ford Explorer",
-    startDate: new Date("2024-10-01"),
-    endDate: new Date("2024-10-15"),
-  },
-  {
-    id: "2",
-    vehiclePlate: "DEF-9012",
-    vehicleModel: "Chevrolet Silverado",
-    startDate: new Date("2024-09-10"),
-    endDate: new Date("2024-09-28"),
-  },
-  {
-    id: "3",
-    vehiclePlate: "JKL-7890",
-    vehicleModel: "Tesla Model 3",
-    startDate: new Date("2024-08-15"),
-    endDate: new Date("2024-09-05"),
-  },
-];
+import { User } from "lucide-react";
+import type { DriverWithAssignment, AssignmentWithDetails } from "@shared/schema";
 
 export default function DriverViewPage() {
   const { toast } = useToast();
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [issueType, setIssueType] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+
+  const { data: drivers = [], isLoading: driversLoading } = useQuery<DriverWithAssignment[]>({
+    queryKey: ["/api/drivers"],
+  });
+
+  const { data: assignments = [] } = useQuery<AssignmentWithDetails[]>({
+    queryKey: ["/api/assignments"],
+  });
+
+  const activeDriver = selectedDriverId 
+    ? drivers.find((d) => d.id === selectedDriverId) 
+    : drivers.find((d) => !d.available);
+
+  const currentAssignment = activeDriver 
+    ? assignments.find((a) => a.driverId === activeDriver.id && a.status === "active")
+    : null;
+
+  const pastAssignments = activeDriver 
+    ? assignments
+        .filter((a) => a.driverId === activeDriver.id && a.status === "completed")
+        .map((a) => ({
+          id: a.id,
+          vehiclePlate: a.vehiclePlate,
+          vehicleModel: a.vehicleModel,
+          startDate: new Date(a.startDate),
+          endDate: a.endDate ? new Date(a.endDate) : undefined,
+        }))
+    : [];
 
   const handleReportIssue = () => {
     setIssueDialogOpen(true);
@@ -78,12 +76,62 @@ export default function DriverViewPage() {
     setIssueDescription("");
   };
 
+  if (driversLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto space-y-6">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (!activeDriver) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <User className="h-16 w-16 text-muted-foreground mx-auto" />
+          <h2 className="text-xl font-semibold">No Active Assignment</h2>
+          <p className="text-muted-foreground max-w-sm">
+            {drivers.length === 0 
+              ? "No drivers have been added to the system yet." 
+              : "Select a driver to view their assignment details."}
+          </p>
+          {drivers.length > 0 && (
+            <Select value={selectedDriverId || ""} onValueChange={setSelectedDriverId}>
+              <SelectTrigger className="w-64 mx-auto" data-testid="select-driver">
+                <SelectValue placeholder="Select a driver" />
+              </SelectTrigger>
+              <SelectContent>
+                {drivers.map((driver) => (
+                  <SelectItem key={driver.id} value={driver.id}>
+                    {driver.name} {driver.available ? "(Available)" : "(Assigned)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const currentAssignmentData = currentAssignment ? {
+    vehicleLicensePlate: currentAssignment.vehiclePlate,
+    vehicleMake: currentAssignment.vehicleModel.split(" ")[0],
+    vehicleModel: currentAssignment.vehicleModel.split(" ").slice(1).join(" "),
+    vehicleType: "sedan",
+    assignedDate: new Date(currentAssignment.startDate),
+    location: "Check vehicle location in your assignment details",
+    notes: currentAssignment.notes || undefined,
+  } : undefined;
+
   return (
     <>
       <DriverAssignmentView
-        driverName="John Smith"
-        currentAssignment={mockCurrentAssignment}
-        pastAssignments={mockPastAssignments}
+        driverName={activeDriver.name}
+        currentAssignment={currentAssignmentData}
+        pastAssignments={pastAssignments}
         onReportIssue={handleReportIssue}
       />
 

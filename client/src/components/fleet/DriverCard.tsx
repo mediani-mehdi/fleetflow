@@ -10,7 +10,7 @@ export type DriverRole = "manager" | "senior" | "standard" | "trainee";
 export interface Driver {
   id: string;
   name: string;
-  role: DriverRole;
+  role: string;
   location: string;
   phone: string;
   assignedVehicle?: string;
@@ -24,14 +24,14 @@ interface DriverCardProps {
   compact?: boolean;
 }
 
-const roleColors: Record<DriverRole, string> = {
+const roleColors: Record<string, string> = {
   manager: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   senior: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   standard: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
   trainee: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
 };
 
-const roleLabels: Record<DriverRole, string> = {
+const roleLabels: Record<string, string> = {
   manager: "Manager",
   senior: "Senior Driver",
   standard: "Driver",
@@ -73,10 +73,10 @@ export function DriverCard({
               variant="secondary"
               className={cn(
                 "text-xs no-default-hover-elevate no-default-active-elevate",
-                roleColors[driver.role]
+                roleColors[driver.role] || roleColors.standard
               )}
             >
-              {roleLabels[driver.role]}
+              {roleLabels[driver.role] || driver.role}
             </Badge>
           </div>
           {!compact && (

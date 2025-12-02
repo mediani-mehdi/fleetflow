@@ -1,9 +1,9 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { StatsCard } from "@/components/fleet/StatsCard";
-import { VehicleTable, Vehicle } from "@/components/fleet/VehicleTable";
-import { AssignmentModal } from "@/components/fleet/AssignmentModal";
+import { VehicleTable } from "@/components/fleet/VehicleTable";
+import { StepByStepAssignmentModal } from "@/components/fleet/StepByStepAssignmentModal";
 import { AddVehicleModal } from "@/components/fleet/AddVehicleModal";
-import { Driver } from "@/components/fleet/DriverCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,36 +15,68 @@ import {
 } from "@/components/ui/select";
 import { Car, CheckCircle, Users, Wrench, Plus, Search, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// todo: remove mock functionality
-const mockVehicles: Vehicle[] = [
-  { id: "1", licensePlate: "ABC-1234", make: "Toyota", model: "Camry", type: "sedan", location: "Downtown HQ", status: "available" },
-  { id: "2", licensePlate: "XYZ-5678", make: "Ford", model: "Explorer", type: "suv", location: "East Branch", status: "assigned", assignedTo: "John Smith" },
-  { id: "3", licensePlate: "DEF-9012", make: "Chevrolet", model: "Silverado", type: "truck", location: "Warehouse", status: "maintenance" },
-  { id: "4", licensePlate: "GHI-3456", make: "Honda", model: "Odyssey", type: "van", location: "North Office", status: "assigned", assignedTo: "Jane Doe" },
-  { id: "5", licensePlate: "JKL-7890", make: "Tesla", model: "Model 3", type: "sedan", location: "Downtown HQ", status: "available" },
-  { id: "6", licensePlate: "MNO-1234", make: "BMW", model: "X5", type: "suv", location: "East Branch", status: "out_of_service" },
-  { id: "7", licensePlate: "PQR-5678", make: "Mercedes", model: "Sprinter", type: "van", location: "Warehouse", status: "available" },
-  { id: "8", licensePlate: "STU-9012", make: "Ram", model: "1500", type: "truck", location: "Downtown HQ", status: "assigned", assignedTo: "Bob Wilson" },
-];
-
-const mockDrivers: Driver[] = [
-  { id: "1", name: "John Smith", role: "senior", location: "Downtown HQ", phone: "(555) 123-4567", available: false },
-  { id: "2", name: "Jane Doe", role: "manager", location: "East Branch", phone: "(555) 234-5678", available: false },
-  { id: "3", name: "Bob Wilson", role: "trainee", location: "Warehouse", phone: "(555) 345-6789", available: false },
-  { id: "4", name: "Alice Brown", role: "standard", location: "Downtown HQ", phone: "(555) 456-7890", available: true },
-  { id: "5", name: "Charlie Davis", role: "senior", location: "North Office", phone: "(555) 567-8901", available: true },
-  { id: "6", name: "Diana Evans", role: "standard", location: "East Branch", phone: "(555) 678-9012", available: true },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { VehicleWithAssignment, ClientWithAssignment } from "@shared/schema";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
-  const [vehicles, setVehicles] = useState(mockVehicles);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithAssignment | null>(null);
+
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery<VehicleWithAssignment[]>({
+    queryKey: ["/api/vehicles"],
+  });
+
+  const { data: clients = [] } = useQuery<ClientWithAssignment[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  const createVehicleMutation = useMutation({
+    mutationFn: async (data: { licensePlate: string; make: string; model: string; type: string; location: string }) => {
+      return apiRequest("/api/vehicles", { method: "POST", body: JSON.stringify(data) });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      toast({
+        title: "Vehicle Added",
+        description: "New vehicle has been added to the fleet",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add vehicle",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createAssignmentMutation = useMutation({
+    mutationFn: async (data: { vehicleId: string; driverId: string; notes?: string }) => {
+      return apiRequest("/api/assignments", { method: "POST", body: JSON.stringify(data) });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+      const client = clients.find((c) => c.id === selectedVehicle?.id);
+      toast({
+        title: "Vehicle Assigned",
+        description: `${selectedVehicle?.make} ${selectedVehicle?.model} has been assigned`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign vehicle",
+        variant: "destructive",
+      });
+    },
+  });
 
   const stats = {
     total: vehicles.length,
@@ -71,38 +103,38 @@ export default function AdminDashboard() {
   };
 
   const handleAssignSubmit = (data: { vehicleId: string; driverId: string; notes: string }) => {
-    const driver = mockDrivers.find((d) => d.id === data.driverId);
-    if (driver) {
-      setVehicles((prev) =>
-        prev.map((v) =>
-          v.id === data.vehicleId
-            ? { ...v, status: "assigned" as const, assignedTo: driver.name }
-            : v
-        )
-      );
-      toast({
-        title: "Vehicle Assigned",
-        description: `${selectedVehicle?.make} ${selectedVehicle?.model} assigned to ${driver.name}`,
-      });
-    }
+    createAssignmentMutation.mutate({
+      vehicleId: data.vehicleId,
+      clientId: data.driverId,
+      notes: data.notes || undefined,
+    });
   };
 
   const handleAddVehicle = (data: { licensePlate: string; make: string; model: string; type: string; location: string }) => {
-    const newVehicle: Vehicle = {
-      id: String(vehicles.length + 1),
-      licensePlate: data.licensePlate,
-      make: data.make,
-      model: data.model,
-      type: data.type as Vehicle["type"],
-      location: data.location,
-      status: "available",
-    };
-    setVehicles((prev) => [...prev, newVehicle]);
-    toast({
-      title: "Vehicle Added",
-      description: `${data.make} ${data.model} (${data.licensePlate}) added to fleet`,
-    });
+    createVehicleMutation.mutate(data);
   };
+
+  const availableClients = clients.filter((c) => c.available);
+
+  if (vehiclesLoading) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-48 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -180,11 +212,10 @@ export default function AdminDashboard() {
       </div>
 
       {selectedVehicle && (
-        <AssignmentModal
+        <StepByStepAssignmentModal
           open={assignModalOpen}
           onOpenChange={setAssignModalOpen}
           vehicleInfo={selectedVehicle}
-          drivers={mockDrivers}
           onAssign={handleAssignSubmit}
         />
       )}

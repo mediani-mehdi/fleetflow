@@ -1,14 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertVehicleSchema, insertDriverSchema, insertAssignmentSchema } from "@shared/schema";
+import { insertVehicleSchema, insertClientSchema, insertAssignmentSchema } from "@shared/schema";
 import { z } from "zod";
+import { setupAuth } from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+  setupAuth(app);
+
   // Vehicles API
   app.get("/api/vehicles", async (req, res) => {
     try {
@@ -74,68 +76,68 @@ export async function registerRoutes(
     }
   });
 
-  // Drivers API
-  app.get("/api/drivers", async (req, res) => {
+  // Clients API
+  app.get("/api/clients", async (req, res) => {
     try {
-      const drivers = await storage.getDrivers();
-      res.json(drivers);
+      const clients = await storage.getClients();
+      res.json(clients);
     } catch (error) {
-      console.error("Error fetching drivers:", error);
-      res.status(500).json({ error: "Failed to fetch drivers" });
+      console.error("Error fetching clients:", error);
+      res.status(500).json({ error: "Failed to fetch clients" });
     }
   });
 
-  app.get("/api/drivers/:id", async (req, res) => {
+  app.get("/api/clients/:id", async (req, res) => {
     try {
-      const driver = await storage.getDriver(req.params.id);
-      if (!driver) {
-        return res.status(404).json({ error: "Driver not found" });
+      const client = await storage.getClient(req.params.id);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
       }
-      res.json(driver);
+      res.json(client);
     } catch (error) {
-      console.error("Error fetching driver:", error);
-      res.status(500).json({ error: "Failed to fetch driver" });
+      console.error("Error fetching client:", error);
+      res.status(500).json({ error: "Failed to fetch client" });
     }
   });
 
-  app.post("/api/drivers", async (req, res) => {
+  app.post("/api/clients", async (req, res) => {
     try {
-      const data = insertDriverSchema.parse(req.body);
-      const driver = await storage.createDriver(data);
-      res.status(201).json(driver);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Invalid driver data", details: error.errors });
-      }
-      console.error("Error creating driver:", error);
-      res.status(500).json({ error: "Failed to create driver" });
-    }
-  });
-
-  app.patch("/api/drivers/:id", async (req, res) => {
-    try {
-      const data = insertDriverSchema.partial().parse(req.body);
-      const driver = await storage.updateDriver(req.params.id, data);
-      if (!driver) {
-        return res.status(404).json({ error: "Driver not found" });
-      }
-      res.json(driver);
+      const data = insertClientSchema.parse(req.body);
+      const client = await storage.createClient(data);
+      res.status(201).json(client);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Invalid driver data", details: error.errors });
+        return res.status(400).json({ error: "Invalid client data", details: error.errors });
       }
-      console.error("Error updating driver:", error);
-      res.status(500).json({ error: "Failed to update driver" });
+      console.error("Error creating client:", error);
+      res.status(500).json({ error: "Failed to create client" });
     }
   });
 
-  app.delete("/api/drivers/:id", async (req, res) => {
+  app.patch("/api/clients/:id", async (req, res) => {
     try {
-      await storage.deleteDriver(req.params.id);
+      const data = insertClientSchema.partial().parse(req.body);
+      const client = await storage.updateClient(req.params.id, data);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+      res.json(client);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid client data", details: error.errors });
+      }
+      console.error("Error updating client:", error);
+      res.status(500).json({ error: "Failed to update client" });
+    }
+  });
+
+  app.delete("/api/clients/:id", async (req, res) => {
+    try {
+      await storage.deleteClient(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting driver:", error);
-      res.status(500).json({ error: "Failed to delete driver" });
+      console.error("Error deleting client:", error);
+      res.status(500).json({ error: "Failed to delete client" });
     }
   });
 
@@ -163,19 +165,19 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/drivers/:id/current-assignment", async (req, res) => {
+  app.get("/api/clients/:id/current-assignment", async (req, res) => {
     try {
-      const assignment = await storage.getActiveAssignmentForDriver(req.params.id);
+      const assignment = await storage.getActiveAssignmentForClient(req.params.id);
       res.json(assignment || null);
     } catch (error) {
-      console.error("Error fetching driver assignment:", error);
-      res.status(500).json({ error: "Failed to fetch driver assignment" });
+      console.error("Error fetching client assignment:", error);
+      res.status(500).json({ error: "Failed to fetch client assignment" });
     }
   });
 
-  app.get("/api/drivers/:id/assignment-history", async (req, res) => {
+  app.get("/api/clients/:id/assignment-history", async (req, res) => {
     try {
-      const history = await storage.getAssignmentHistoryForDriver(req.params.id);
+      const history = await storage.getAssignmentHistoryForClient(req.params.id);
       res.json(history);
     } catch (error) {
       console.error("Error fetching assignment history:", error);
@@ -223,21 +225,62 @@ export async function registerRoutes(
     }
   });
 
+  // Password Change API
+  app.post("/api/change-password", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "Current password and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "New password must be at least 6 characters" });
+      }
+
+      // Verify current password
+      const bcrypt = await import("bcryptjs");
+      const user = await storage.getUser(req.user.id);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      // Hash and update new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUserPassword(user.id, hashedPassword);
+
+      res.json({ message: "Password updated successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
   // Stats endpoint for dashboard
   app.get("/api/stats", async (req, res) => {
     try {
       const vehicles = await storage.getVehicles();
-      const drivers = await storage.getDrivers();
-      
+      const clients = await storage.getClients();
+
       const stats = {
         totalVehicles: vehicles.length,
         availableVehicles: vehicles.filter(v => v.status === "available").length,
         assignedVehicles: vehicles.filter(v => v.status === "assigned").length,
         maintenanceVehicles: vehicles.filter(v => v.status === "maintenance" || v.status === "out_of_service").length,
-        totalDrivers: drivers.length,
-        availableDrivers: drivers.filter(d => d.available).length,
+        totalClients: clients.length,
+        availableClients: clients.filter(c => c.available).length,
       };
-      
+
       res.json(stats);
     } catch (error) {
       console.error("Error fetching stats:", error);

@@ -67,7 +67,7 @@ export function AddVehicleModal({
             <Label htmlFor="licensePlate">License Plate *</Label>
             <Input
               id="licensePlate"
-              placeholder="ABC-1234"
+              placeholder="12345-A-26"
               value={formData.licensePlate}
               onChange={(e) =>
                 setFormData({ ...formData, licensePlate: e.target.value.toUpperCase() })
@@ -127,10 +127,12 @@ export function AddVehicleModal({
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Downtown HQ">Downtown HQ</SelectItem>
-                <SelectItem value="East Branch">East Branch</SelectItem>
-                <SelectItem value="North Office">North Office</SelectItem>
-                <SelectItem value="Warehouse">Warehouse</SelectItem>
+                <SelectItem value="Casablanca">Casablanca</SelectItem>
+                <SelectItem value="Rabat">Rabat</SelectItem>
+                <SelectItem value="Marrakech">Marrakech</SelectItem>
+                <SelectItem value="Tangier">Tangier</SelectItem>
+                <SelectItem value="Agadir">Agadir</SelectItem>
+                <SelectItem value="Fes">Fes</SelectItem>
               </SelectContent>
             </Select>
           </div>
