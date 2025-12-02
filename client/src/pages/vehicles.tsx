@@ -10,7 +10,7 @@ import { Plus, Search, Car } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { VehicleWithAssignment, DriverWithAssignment } from "@shared/schema";
+import type { VehicleWithAssignment, ClientWithAssignment } from "@shared/schema";
 
 export default function VehiclesPage() {
   const { toast } = useToast();
@@ -24,7 +24,7 @@ export default function VehiclesPage() {
     queryKey: ["/api/vehicles"],
   });
 
-  const { data: drivers = [] } = useQuery<DriverWithAssignment[]>({
+  const { data: drivers = [] } = useQuery<ClientWithAssignment[]>({
     queryKey: ["/api/drivers"],
   });
 

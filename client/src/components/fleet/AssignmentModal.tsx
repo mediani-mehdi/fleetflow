@@ -18,9 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DriverCard, Driver } from "./DriverCard";
+import { DriverCard } from "./DriverCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Filter } from "lucide-react";
+
+import type { ClientWithAssignment } from "@shared/schema";
 
 interface AssignmentModalProps {
   open: boolean;
@@ -31,7 +33,7 @@ interface AssignmentModalProps {
     make: string;
     model: string;
   };
-  drivers: Driver[];
+  drivers: ClientWithAssignment[];
   onAssign: (data: { vehicleId: string; driverId: string; notes: string }) => void;
 }
 
@@ -45,13 +47,14 @@ export function AssignmentModal({
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const filteredDrivers = drivers.filter((driver) => {
-    const matchesSearch = driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const fullName = `${driver.firstName} ${driver.lastName}`;
+    const matchesSearch = fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       driver.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === "all" || driver.role === roleFilter;
-    return matchesSearch && matchesRole && driver.available;
+    const matchesType = typeFilter === "all" || driver.type === typeFilter;
+    return matchesSearch && matchesType && driver.available;
   });
 
   const handleSubmit = () => {
@@ -73,7 +76,7 @@ export function AssignmentModal({
         <DialogHeader>
           <DialogTitle>Assign Vehicle</DialogTitle>
           <DialogDescription>
-            Assign {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.licensePlate}) to a driver
+            Assign {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.licensePlate}) to a client
           </DialogDescription>
         </DialogHeader>
 
@@ -81,24 +84,22 @@ export function AssignmentModal({
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search drivers..."
+              placeholder="Search clients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
               data-testid="input-search-drivers"
             />
           </div>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-role-filter">
               <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Filter by role" />
+              <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
-              <SelectItem value="senior">Senior Driver</SelectItem>
-              <SelectItem value="standard">Driver</SelectItem>
-              <SelectItem value="trainee">Trainee</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="new">New Client</SelectItem>
+              <SelectItem value="existing">Existing Client</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -107,7 +108,7 @@ export function AssignmentModal({
           <div className="space-y-2">
             {filteredDrivers.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                No available drivers found
+                No available clients found
               </p>
             ) : (
               filteredDrivers.map((driver) => (
